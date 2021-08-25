@@ -163,3 +163,9 @@ o2physics_add_dpl_workflow(hf-sel-optimisation
                     SOURCES HFSelOptimisation.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisDataModel O2Physics::AnalysisCore O2::DetectorsVertexing
                     COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(hf-task-lc-flow
+                    SOURCES taskLcFlow.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisDataModel O2Physics::AnalysisCore O2::DetectorsVertexing
+                    COMPONENT_NAME Analysis)
+
