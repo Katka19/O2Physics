@@ -47,8 +47,8 @@ struct TaskLcFlow {
       {"hPhiHadronsSelected", "charged hadrons after cuts; #varphi; entries", {HistType::kTH1F, {{180, 0., 2*TMath::Pi()}}}},
       {"hPtCand", "3-prong candidates;candidate #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
       {"Ntracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 100}}}},
-      {"hcorrelations", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 100}}}},
-      {"hcorrelationsGap", "charged hadron <<2>> |#Delta #eta| > 0.4; Number of tracks; <<2>> |#Delta #eta| > 0.4", {HistType::kTProfile, {{100, 0., 100}}}}
+      {"hcorrRef", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 100}}}},
+      {"hcorrRefGap", "charged hadron <<2>> |#Delta #eta| > 0.0; Number of tracks; <<2>> |#Delta #eta| > 0.0", {HistType::kTProfile, {{100, 0., 100}}}}
       }};
 
   Configurable<int> d_selectionFlagLc{"d_selectionFlagLc", 1, "Selection Flag for Lc"};
@@ -61,11 +61,15 @@ struct TaskLcFlow {
   {
     auto vbins = (std::vector<double>)bins;
     registry.add("hmass", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrDiffGap", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrDiffGap_2", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
   }
 
   /// aod::BigTracks is not soa::Filtered, should be added when filters are added
   void process(aod::Collision const& collisions, aod::BigTracks const& tracks, soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelLcCandidate>> const& candidates)
   {
+
+    auto vbins = (std::vector<double>)bins;
 
     int Ntracks = 0;
     int NtracksGapNegative = 0;
@@ -108,7 +112,7 @@ struct TaskLcFlow {
       Qcos2 += TMath::Cos(2*track.phi());
       Qsin2 += TMath::Sin(2*track.phi());
 
-      if(track.eta() < -0.2) {
+      if(track.eta() < 0.) {
         Qcos0GapNegative += TMath::Cos(0*track.phi());
         Qsin0GapNegative += TMath::Sin(0*track.phi());
         Qcos2GapNegative += TMath::Cos(2*track.phi());
@@ -116,7 +120,7 @@ struct TaskLcFlow {
         NtracksGapNegative++;
       }
 
-      if(track.eta() > 0.2) {
+      if(track.eta() > 0.) {
         Qcos0GapPositive += TMath::Cos(0*track.phi());
         Qsin0GapPositive += TMath::Sin(0*track.phi());
         Qcos2GapPositive += TMath::Cos(2*track.phi());
@@ -140,8 +144,8 @@ struct TaskLcFlow {
     double den = denominator.Re();
     double corr = num/den;
 
-    if(Ntracks > 1) {
-      registry.fill(HIST("hcorrelations"), Ntracks, corr, den);
+    if(Ntracks > 1 && den != 0) {
+      registry.fill(HIST("hcorrRef"), Ntracks, corr, den);
     }
 
     TComplex numeratorGap = Qvector2GapNegative*TComplex::Conjugate(Qvector2GapPositive);
@@ -150,26 +154,130 @@ struct TaskLcFlow {
     double denGap = denominatorGap.Re();
     double corrGap = numGap/denGap;
 
-    if(NtracksGapNegative > 0 && NtracksGapPositive > 0) {
-      registry.fill(HIST("hcorrelationsGap"), Ntracks, corrGap, denGap);
+    if(NtracksGapNegative > 0 && NtracksGapPositive > 0 && denGap != 0) {
+      registry.fill(HIST("hcorrRefGap"), Ntracks, corrGap, denGap);
     }
 
-    for (auto& candidate : candidates) {
-      if (!(candidate.hfflag() & 1 << DecayType::LcToPKPi)) {
-        continue;
-      }
-      if (cutYCandMax >= 0. && std::abs(YLc(candidate)) > cutYCandMax) {
-        continue;
-      }
-      if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
-        registry.fill(HIST("hmass"), InvMassLcpKpi(candidate), candidate.pt());
-      }
-      if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
-        registry.fill(HIST("hmass"), InvMassLcpiKp(candidate), candidate.pt());
-      }
-      registry.fill(HIST("hPtCand"), candidate.pt());
-    } // Lc candidates
+    //  Lambda candidates
+
+        const int sizePt = vbins.size();
+        int NtracksLcNegative[sizePt][30];
+        int NtracksLcPositive[sizePt][30];
+        double pcos0LcNegative[sizePt][30];
+        double pcos0LcPositive[sizePt][30];
+        double psin0LcNegative[sizePt][30];
+        double psin0LcPositive[sizePt][30];
+        double pcos2LcNegative[sizePt][30];
+        double pcos2LcPositive[sizePt][30];
+        double psin2LcNegative[sizePt][30];
+        double psin2LcPositive[sizePt][30];
+        TComplex pvector2LcNegative;
+        TComplex pvector2LcPositive;
+        TComplex pvector0LcNegative;
+        TComplex pvector0LcPositive;
+
+        for (auto& candidate : candidates) {
+          if (!(candidate.hfflag() & 1 << DecayType::LcToPKPi)) {
+            continue;
+          }
+          if (cutYCandMax >= 0. && std::abs(YLc(candidate)) > cutYCandMax) {
+            continue;
+          }
+          if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
+            registry.fill(HIST("hmass"), InvMassLcpKpi(candidate), candidate.pt());
+          }
+          if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
+            registry.fill(HIST("hmass"), InvMassLcpiKp(candidate), candidate.pt());
+          }
+          registry.fill(HIST("hPtCand"), candidate.pt());
+          
+          int indexPt = getPtIndex(candidate.pt(), vbins);
+
+          int indexMinv = 0;
+          if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
+            indexMinv = getMinvIndex(InvMassLcpKpi(candidate));
+          }
+          if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
+            indexMinv = getMinvIndex(InvMassLcpiKp(candidate));
+          }
+
+          if(candidate.eta() < 0.) {
+            pcos0LcNegative[indexPt][indexMinv] += TMath::Cos(0*candidate.phi());
+            psin0LcNegative[indexPt][indexMinv] += TMath::Sin(0*candidate.phi());
+            pcos2LcNegative[indexPt][indexMinv] += TMath::Cos(2*candidate.phi());
+            psin2LcNegative[indexPt][indexMinv] += TMath::Sin(2*candidate.phi());
+            NtracksLcNegative[indexPt][indexMinv]++;
+          }
+
+          if(candidate.eta() > 0.) {
+            pcos0LcPositive[indexPt][indexMinv] += TMath::Cos(0*candidate.phi());
+            psin0LcPositive[indexPt][indexMinv] += TMath::Sin(0*candidate.phi());
+            pcos2LcPositive[indexPt][indexMinv] += TMath::Cos(2*candidate.phi());
+            psin2LcPositive[indexPt][indexMinv] += TMath::Sin(2*candidate.phi());
+            NtracksLcPositive[indexPt][indexMinv]++;
+          }
+        } // Lc candidates
+
+        for(int ipt = 0; ipt < vbins.size(); ipt ++) {
+          for(int iminv = 0; iminv < 30; iminv ++) {
+          pvector0LcNegative = TComplex(pcos0LcNegative[ipt][iminv], psin0LcNegative[ipt][iminv]);
+          pvector0LcPositive = TComplex(pcos0LcPositive[ipt][iminv], psin0LcPositive[ipt][iminv]);
+          pvector2LcNegative = TComplex(pcos2LcNegative[ipt][iminv], psin2LcNegative[ipt][iminv]);
+          pvector2LcPositive = TComplex(pcos2LcPositive[ipt][iminv], psin2LcPositive[ipt][iminv]);
+
+          // case 1 (Lambda from negative eta)
+          TComplex numeratorLc = pvector2LcNegative*TComplex::Conjugate(Qvector2GapPositive);
+          TComplex denominatorLc = pvector0LcNegative*TComplex::Conjugate(Qvector0GapPositive);
+          double numLc = numeratorLc.Re();
+          double denLc = denominatorLc.Re();
+          double corrLc = numLc/denLc;
+
+          if(NtracksLcNegative[ipt][iminv] > 0 && NtracksGapPositive > 0 && denLc != 0) {
+            registry.fill(HIST("hcorrDiffGap"), iminv, ipt+1, corrLc, denLc);
+          }
+
+          // case 2 (Lambda from positive eta)
+          TComplex numeratorLc_2 = Qvector2GapNegative*TComplex::Conjugate(pvector2LcPositive);
+          TComplex denominatorLc_2 = Qvector0GapNegative*TComplex::Conjugate(pvector0LcPositive);
+          double numLc_2 = numeratorLc_2.Re();
+          double denLc_2 = denominatorLc_2.Re();
+          double corrLc_2 = numLc_2/denLc_2;
+
+          if(NtracksLcPositive[ipt][iminv] > 0 && NtracksGapNegative > 0 && denLc_2 != 0) {
+            registry.fill(HIST("hcorrDiffGap_2"), iminv, ipt+1, corrLc_2, denLc_2);
+          }
+          } // minv
+        } // pT
+
   } // process()
+
+  int getPtIndex(double candidatePt, std::vector<double> vbins) {
+    int indexPt = 0;
+    for(int ipt=0; ipt<vbins.size(); ipt++) {
+      if(candidatePt > vbins[ipt] && candidatePt <= vbins[ipt+1]) {
+        indexPt = ipt;
+      }
+    }
+    return indexPt;
+  }
+
+  int getMinvIndex(double candidateMinv) {
+    int indexMinv = 0;
+
+    double minvarray[30];
+    for(int i = 0; i < 30; i++) {
+      minvarray[i] = 1.6 + 0.05*i;
+    }
+
+    for(int iminv = 0; iminv < 30; iminv++) {
+      if(candidateMinv > minvarray[iminv] && candidateMinv <= minvarray[iminv+1]) {
+        indexMinv = iminv;
+      }
+
+    }
+    return indexMinv;
+  }
+
 }; // end of struct of Lc flow task
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
