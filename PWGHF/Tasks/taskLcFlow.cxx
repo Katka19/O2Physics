@@ -61,6 +61,8 @@ struct TaskLcFlow {
   {
     auto vbins = (std::vector<double>)bins;
     registry.add("hmass", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hmassEtaPositive", "3-prong candidates, |#eta|>0;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hmassEtaNegative", "3-prong candidates, |#eta|<0;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
     registry.add("hcorrDiffGap", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
     registry.add("hcorrDiffGap_2", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
   }
@@ -159,101 +161,109 @@ struct TaskLcFlow {
     }
 
     //  Lambda candidates
+    double minvarray[31];
+    for(int i = 0; i < 31; i++) {
+      minvarray[i] = 1.6 + 0.05*i;
+    }
 
-        const int sizePt = vbins.size();
-        int NtracksLcNegative[sizePt][30];
-        int NtracksLcPositive[sizePt][30];
-        double pcos0LcNegative[sizePt][30];
-        double pcos0LcPositive[sizePt][30];
-        double psin0LcNegative[sizePt][30];
-        double psin0LcPositive[sizePt][30];
-        double pcos2LcNegative[sizePt][30];
-        double pcos2LcPositive[sizePt][30];
-        double psin2LcNegative[sizePt][30];
-        double psin2LcPositive[sizePt][30];
-        TComplex pvector2LcNegative;
-        TComplex pvector2LcPositive;
-        TComplex pvector0LcNegative;
-        TComplex pvector0LcPositive;
+    //const int sizePt = vbins.size();
+    const int sizePt = 8;
+    int NtracksLcNegative[sizePt][31];
+    int NtracksLcPositive[sizePt][31];
+    double pcos0LcNegative[sizePt][31];
+    double pcos0LcPositive[sizePt][31];
+    double psin0LcNegative[sizePt][31];
+    double psin0LcPositive[sizePt][31];
+    double pcos2LcNegative[sizePt][31];
+    double pcos2LcPositive[sizePt][31];
+    double psin2LcNegative[sizePt][31];
+    double psin2LcPositive[sizePt][31];
+    TComplex pvector2LcNegative;
+    TComplex pvector2LcPositive;
+    TComplex pvector0LcNegative;
+    TComplex pvector0LcPositive;
 
-        for (auto& candidate : candidates) {
-          if (!(candidate.hfflag() & 1 << DecayType::LcToPKPi)) {
-            continue;
-          }
-          if (cutYCandMax >= 0. && std::abs(YLc(candidate)) > cutYCandMax) {
-            continue;
-          }
-          if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
-            registry.fill(HIST("hmass"), InvMassLcpKpi(candidate), candidate.pt());
-          }
-          if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
-            registry.fill(HIST("hmass"), InvMassLcpiKp(candidate), candidate.pt());
-          }
-          registry.fill(HIST("hPtCand"), candidate.pt());
-          
-          int indexPt = getPtIndex(candidate.pt(), vbins);
+    for (auto& candidate : candidates) {
+      if (!(candidate.hfflag() & 1 << DecayType::LcToPKPi)) {
+        continue;
+      }
+      if (cutYCandMax >= 0. && std::abs(YLc(candidate)) > cutYCandMax) {
+        continue;
+      }
+      if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
+        registry.fill(HIST("hmass"), InvMassLcpKpi(candidate), candidate.pt());
+      }
+      if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
+        registry.fill(HIST("hmass"), InvMassLcpiKp(candidate), candidate.pt());
+      }
+      registry.fill(HIST("hPtCand"), candidate.pt());
+      
+      int indexPt = getPtIndex(candidate.pt(), vbins);
 
-          int indexMinv = 0;
-          if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
-            indexMinv = getMinvIndex(InvMassLcpKpi(candidate));
-          }
-          if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
-            indexMinv = getMinvIndex(InvMassLcpiKp(candidate));
-          }
+      int indexMinv = 0;
+      if (candidate.isSelLcpKpi() >= d_selectionFlagLc) {
+        indexMinv = getMinvIndex(InvMassLcpKpi(candidate), minvarray);
+      }
+      if (candidate.isSelLcpiKp() >= d_selectionFlagLc) {
+        indexMinv = getMinvIndex(InvMassLcpiKp(candidate), minvarray);
+      }
 
-          if(candidate.eta() < 0.) {
-            pcos0LcNegative[indexPt][indexMinv] += TMath::Cos(0*candidate.phi());
-            psin0LcNegative[indexPt][indexMinv] += TMath::Sin(0*candidate.phi());
-            pcos2LcNegative[indexPt][indexMinv] += TMath::Cos(2*candidate.phi());
-            psin2LcNegative[indexPt][indexMinv] += TMath::Sin(2*candidate.phi());
-            NtracksLcNegative[indexPt][indexMinv]++;
-          }
+      if(candidate.eta() < 0.) {
+        pcos0LcNegative[indexPt][indexMinv] += TMath::Cos(0*candidate.phi());
+        psin0LcNegative[indexPt][indexMinv] += TMath::Sin(0*candidate.phi());
+        pcos2LcNegative[indexPt][indexMinv] += TMath::Cos(2*candidate.phi());
+        psin2LcNegative[indexPt][indexMinv] += TMath::Sin(2*candidate.phi());
+        NtracksLcNegative[indexPt][indexMinv]++;
+        registry.fill(HIST("hmassEtaNegative"), InvMassLcpKpi(candidate), candidate.pt());
+      }
 
-          if(candidate.eta() > 0.) {
-            pcos0LcPositive[indexPt][indexMinv] += TMath::Cos(0*candidate.phi());
-            psin0LcPositive[indexPt][indexMinv] += TMath::Sin(0*candidate.phi());
-            pcos2LcPositive[indexPt][indexMinv] += TMath::Cos(2*candidate.phi());
-            psin2LcPositive[indexPt][indexMinv] += TMath::Sin(2*candidate.phi());
-            NtracksLcPositive[indexPt][indexMinv]++;
-          }
-        } // Lc candidates
+      if(candidate.eta() > 0.) {
+        pcos0LcPositive[indexPt][indexMinv] += TMath::Cos(0*candidate.phi());
+        psin0LcPositive[indexPt][indexMinv] += TMath::Sin(0*candidate.phi());
+        pcos2LcPositive[indexPt][indexMinv] += TMath::Cos(2*candidate.phi());
+        psin2LcPositive[indexPt][indexMinv] += TMath::Sin(2*candidate.phi());
+        NtracksLcPositive[indexPt][indexMinv]++;
+        registry.fill(HIST("hmassEtaPositive"), InvMassLcpKpi(candidate), candidate.pt());
+      }
+    } // Lc candidates
 
-        for(int ipt = 0; ipt < vbins.size(); ipt ++) {
-          for(int iminv = 0; iminv < 30; iminv ++) {
-          pvector0LcNegative = TComplex(pcos0LcNegative[ipt][iminv], psin0LcNegative[ipt][iminv]);
-          pvector0LcPositive = TComplex(pcos0LcPositive[ipt][iminv], psin0LcPositive[ipt][iminv]);
-          pvector2LcNegative = TComplex(pcos2LcNegative[ipt][iminv], psin2LcNegative[ipt][iminv]);
-          pvector2LcPositive = TComplex(pcos2LcPositive[ipt][iminv], psin2LcPositive[ipt][iminv]);
+    //for(int ipt = 0; ipt < vbins.size(); ipt ++) {
+    for(int ipt = 0; ipt < sizePt; ipt ++) {
+      for(int iminv = 0; iminv < 31; iminv ++) {
+        pvector0LcNegative = TComplex(pcos0LcNegative[ipt][iminv], psin0LcNegative[ipt][iminv]);
+        pvector0LcPositive = TComplex(pcos0LcPositive[ipt][iminv], psin0LcPositive[ipt][iminv]);
+        pvector2LcNegative = TComplex(pcos2LcNegative[ipt][iminv], psin2LcNegative[ipt][iminv]);
+        pvector2LcPositive = TComplex(pcos2LcPositive[ipt][iminv], psin2LcPositive[ipt][iminv]);
 
-          // case 1 (Lambda from negative eta)
-          TComplex numeratorLc = pvector2LcNegative*TComplex::Conjugate(Qvector2GapPositive);
-          TComplex denominatorLc = pvector0LcNegative*TComplex::Conjugate(Qvector0GapPositive);
-          double numLc = numeratorLc.Re();
-          double denLc = denominatorLc.Re();
-          double corrLc = numLc/denLc;
+        // case 1 (Lambda from negative eta)
+        TComplex numeratorLc = pvector2LcNegative*TComplex::Conjugate(Qvector2GapPositive);
+        TComplex denominatorLc = pvector0LcNegative*TComplex::Conjugate(Qvector0GapPositive);
+        double numLc = numeratorLc.Re();
+        double denLc = denominatorLc.Re();
+        double corrLc = numLc/denLc;
 
-          if(NtracksLcNegative[ipt][iminv] > 0 && NtracksGapPositive > 0 && denLc != 0) {
-            registry.fill(HIST("hcorrDiffGap"), iminv, ipt+1, corrLc, denLc);
-          }
+        if(NtracksLcNegative[ipt][iminv] > 0 && NtracksGapPositive > 0 && denLc != 0) {
+          registry.fill(HIST("hcorrDiffGap"), (minvarray[iminv]+minvarray[iminv+1])/2.0, (vbins[ipt]+vbins[ipt+1])/2.0, corrLc, denLc);
+        }
 
-          // case 2 (Lambda from positive eta)
-          TComplex numeratorLc_2 = Qvector2GapNegative*TComplex::Conjugate(pvector2LcPositive);
-          TComplex denominatorLc_2 = Qvector0GapNegative*TComplex::Conjugate(pvector0LcPositive);
-          double numLc_2 = numeratorLc_2.Re();
-          double denLc_2 = denominatorLc_2.Re();
-          double corrLc_2 = numLc_2/denLc_2;
+        // case 2 (Lambda from positive eta)
+        TComplex numeratorLc_2 = Qvector2GapNegative*TComplex::Conjugate(pvector2LcPositive);
+        TComplex denominatorLc_2 = Qvector0GapNegative*TComplex::Conjugate(pvector0LcPositive);
+        double numLc_2 = numeratorLc_2.Re();
+        double denLc_2 = denominatorLc_2.Re();
+        double corrLc_2 = numLc_2/denLc_2;
 
-          if(NtracksLcPositive[ipt][iminv] > 0 && NtracksGapNegative > 0 && denLc_2 != 0) {
-            registry.fill(HIST("hcorrDiffGap_2"), iminv, ipt+1, corrLc_2, denLc_2);
-          }
-          } // minv
-        } // pT
+        if(NtracksLcPositive[ipt][iminv] > 0 && NtracksGapNegative > 0 && denLc_2 != 0) {
+          registry.fill(HIST("hcorrDiffGap_2"), (minvarray[iminv]+minvarray[iminv+1])/2.0, (vbins[ipt]+vbins[ipt+1])/2.0, corrLc_2, denLc_2);
+        }
+      } // minv
+    } // pT
 
   } // process()
 
   int getPtIndex(double candidatePt, std::vector<double> vbins) {
     int indexPt = 0;
-    for(int ipt=0; ipt<vbins.size(); ipt++) {
+    for(int ipt=0; ipt<8; ipt++) {
       if(candidatePt > vbins[ipt] && candidatePt <= vbins[ipt+1]) {
         indexPt = ipt;
       }
@@ -261,15 +271,9 @@ struct TaskLcFlow {
     return indexPt;
   }
 
-  int getMinvIndex(double candidateMinv) {
+  int getMinvIndex(double candidateMinv, double minvarray[]) {
     int indexMinv = 0;
-
-    double minvarray[30];
-    for(int i = 0; i < 30; i++) {
-      minvarray[i] = 1.6 + 0.05*i;
-    }
-
-    for(int iminv = 0; iminv < 30; iminv++) {
+    for(int iminv = 0; iminv < 31; iminv++) {
       if(candidateMinv > minvarray[iminv] && candidateMinv <= minvarray[iminv+1]) {
         indexMinv = iminv;
       }
