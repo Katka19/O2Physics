@@ -46,9 +46,9 @@ struct TaskLcFlow {
       {"hEtaHadronsSelected", "charged hadrons after cuts; #eta; entries", {HistType::kTH1F, {{100, -4., 4.}}}},
       {"hPhiHadronsSelected", "charged hadrons after cuts; #varphi; entries", {HistType::kTH1F, {{180, 0., 2*TMath::Pi()}}}},
       {"hPtCand", "3-prong candidates;candidate #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
-      {"Ntracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 100}}}},
-      {"hcorrRef", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 100}}}},
-      {"hcorrRefGap", "charged hadron <<2>> |#Delta #eta| > 0.0; Number of tracks; <<2>> |#Delta #eta| > 0.0", {HistType::kTProfile, {{100, 0., 100}}}}
+      {"Ntracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 10000}}}},
+      {"hcorrRef", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 10000}}}},
+      {"hcorrRefGap", "charged hadron <<2>> |#Delta #eta| > 0.0; Number of tracks; <<2>> |#Delta #eta| > 0.0", {HistType::kTProfile, {{100, 0., 10000}}}}
       }};
 
   Configurable<int> d_selectionFlagLc{"d_selectionFlagLc", 1, "Selection Flag for Lc"};
@@ -64,10 +64,11 @@ struct TaskLcFlow {
     registry.add("hmass2", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
     registry.add("hmassEtaPositive", "3-prong candidates, |#eta|>0;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
     registry.add("hmassEtaNegative", "3-prong candidates, |#eta|<0;inv. mass (p K #pi) (GeV/#it{c}^{2});entries", {HistType::kTH2F, {{500, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
-    registry.add("hcorrDiffGap", "3-prong candidates; p_{T} (GeV/#it{c})", {HistType::kTProfile, {{vbins, "#it{p}_{T} (GeV/#it{c})"}}});
-    registry.add("hcorrDiffGap_2", "3-prong candidates; p_{T} (GeV/#it{c})", {HistType::kTProfile, {{vbins, "#it{p}_{T} (GeV/#it{c})"}}});
-    registry.add("hcorrLcDiffGap", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
-    registry.add("hcorrLcDiffGap_2", "3-prong candidates;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrDiff", "charged hadrons <<2'>>; p_{T} (GeV/#it{c})", {HistType::kTProfile, {{vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrDiffGap", "charged hadrons <<2'>> |#Delta#eta|>0, #eta(p-vector)<0; p_{T} (GeV/#it{c})", {HistType::kTProfile, {{vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrDiffGap_2", "charged hadrons <<2'>> |#Delta#eta|>0, #eta(p-vector)>0; p_{T} (GeV/#it{c})", {HistType::kTProfile, {{vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrLcDiffGap", "Lc <<2'>> |#Delta#eta|>0, #eta(p-vector)<0;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
+    registry.add("hcorrLcDiffGap_2", "Lc <<2'>> |#Delta#eta|>0, #eta(p-vector)>0;inv. mass (p K #pi) (GeV/#it{c}^{2}); p_{T} (GeV/#it{c})", {HistType::kTProfile2D, {{30, 1.6, 3.1}, {vbins, "#it{p}_{T} (GeV/#it{c})"}}});
   }
 
   /// aod::BigTracks is not soa::Filtered, should be added when filters are added
@@ -104,8 +105,13 @@ struct TaskLcFlow {
     TComplex Qvector0GapNegative = TComplex(0,0);
     TComplex Qvector0GapPositive = TComplex(0,0);
 
+    int NtracksDiff[sizePt] = {0};
     int NtracksDiffGapNegative[sizePt] = {0};
     int NtracksDiffGapPositive[sizePt] = {0};
+    double pcos0[sizePt] = {0};
+    double psin0[sizePt] = {0};
+    double pcos2[sizePt] = {0};
+    double psin2[sizePt] = {0};
     double pcos0GapNegative[sizePt] = {0};
     double pcos0GapPositive[sizePt] = {0};
     double psin0GapNegative[sizePt] = {0};
@@ -114,6 +120,8 @@ struct TaskLcFlow {
     double pcos2GapPositive[sizePt] = {0};
     double psin2GapNegative[sizePt] = {0};
     double psin2GapPositive[sizePt] = {0};
+    TComplex pvector0 = TComplex(0,0);
+    TComplex pvector2 = TComplex(0,0);
     TComplex pvector2GapNegative = TComplex(0,0);
     TComplex pvector2GapPositive = TComplex(0,0);
     TComplex pvector0GapNegative = TComplex(0,0);
@@ -140,6 +148,12 @@ struct TaskLcFlow {
 
       int indexPt = getPtIndex(track.pt(), vbins);
       if(indexPt == -1) continue;
+
+      pcos0[indexPt] += TMath::Cos(0*track.phi());
+      psin0[indexPt] += TMath::Sin(0*track.phi());
+      pcos2[indexPt] += TMath::Cos(2*track.phi());
+      psin2[indexPt] += TMath::Sin(2*track.phi());
+      NtracksDiff[indexPt]++;
 
       if(track.eta() < 0.) {
         Qcos0GapNegative += TMath::Cos(0*track.phi());
@@ -198,10 +212,23 @@ struct TaskLcFlow {
     }
 
     for(int ipt = 0; ipt < sizePt; ipt ++) {
+      pvector0 = TComplex(pcos0[ipt], psin0[ipt]);
+      pvector2 = TComplex(pcos2[ipt], psin2[ipt]);
       pvector0GapNegative = TComplex(pcos0GapNegative[ipt], psin0GapNegative[ipt]);
       pvector0GapPositive = TComplex(pcos0GapPositive[ipt], psin0GapPositive[ipt]);
       pvector2GapNegative = TComplex(pcos2GapNegative[ipt], psin2GapNegative[ipt]);
       pvector2GapPositive = TComplex(pcos2GapPositive[ipt], psin2GapPositive[ipt]);
+
+      //  no eta gap
+      TComplex numeratorDiff = pvector2*TComplex::Conjugate(Qvector2) - pvector0;
+      TComplex denominatorDiff = pvector0*TComplex::Conjugate(Qvector0) - pvector0;
+      double numDiff = numeratorDiff.Re();
+      double denDiff = denominatorDiff.Re();
+      double corrDiff = numDiff/denDiff;
+
+      if(NtracksDiff[ipt] > 0 && Ntracks > 0 && denDiff != 0) {
+        registry.fill(HIST("hcorrDiff"), (vbins[ipt]+vbins[ipt+1])/2.0, corrDiff, denDiff);
+      }
 
       // case 1 (hadrons from negative eta)
       TComplex numeratorDiffGap = pvector2GapNegative*TComplex::Conjugate(Qvector2GapPositive);
@@ -237,6 +264,8 @@ struct TaskLcFlow {
     double pcos2LcPositive[sizePt][sizeMinv] = {0};
     double psin2LcNegative[sizePt][sizeMinv] = {0};
     double psin2LcPositive[sizePt][sizeMinv] = {0};
+    TComplex pvector0Lc = TComplex(0,0);
+    TComplex pvector2Lc = TComplex(0,0);
     TComplex pvector2LcNegative = TComplex(0,0);
     TComplex pvector2LcPositive = TComplex(0,0);
     TComplex pvector0LcNegative = TComplex(0,0);
@@ -258,8 +287,6 @@ struct TaskLcFlow {
       registry.fill(HIST("hPtCand"), candidate.pt());
      
       int indexPt = getPtIndex(candidate.pt(), vbins);
-
-      //if(InvMassLcpKpi(candidate) > 3.1) continue;
       int indexMinv = getMinvIndex(InvMassLcpKpi(candidate), minvarray);
 
       if(indexPt == -1) continue;
@@ -296,14 +323,14 @@ struct TaskLcFlow {
         pvector2LcPositive = TComplex(pcos2LcPositive[ipt][iminv], psin2LcPositive[ipt][iminv]);
 
         // case 1 (Lambda from negative eta)
-        TComplex numeratorLc = pvector2LcNegative*TComplex::Conjugate(Qvector2GapPositive);
-        TComplex denominatorLc = pvector0LcNegative*TComplex::Conjugate(Qvector0GapPositive);
-        double numLc = numeratorLc.Re();
-        double denLc = denominatorLc.Re();
-        double corrLc = numLc/denLc;
+        TComplex numeratorLc_1 = pvector2LcNegative*TComplex::Conjugate(Qvector2GapPositive);
+        TComplex denominatorLc_1 = pvector0LcNegative*TComplex::Conjugate(Qvector0GapPositive);
+        double numLc_1 = numeratorLc_1.Re();
+        double denLc_1 = denominatorLc_1.Re();
+        double corrLc_1 = numLc_1/denLc_1;
 
-        if(NtracksLcNegative[ipt][iminv] > 0 && NtracksGapPositive > 0 && denLc != 0) {
-          registry.fill(HIST("hcorrLcDiffGap"), binMinv, binPt, corrLc, denLc);
+        if(NtracksLcNegative[ipt][iminv] > 0 && NtracksGapPositive > 0 && denLc_1 != 0) {
+          registry.fill(HIST("hcorrLcDiffGap"), binMinv, binPt, corrLc_1, denLc_1);
         }
 
         // case 2 (Lambda from positive eta)
