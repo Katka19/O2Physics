@@ -16,8 +16,8 @@
 
 #include "Framework/AnalysisTask.h"
 #include "Framework/HistogramRegistry.h"
-#include "AnalysisDataModel/HFSecondaryVertex.h"
-#include "AnalysisDataModel/HFCandidateSelectionTables.h"
+#include "PWGHF/DataModel/HFSecondaryVertex.h"
+#include "PWGHF/DataModel/HFCandidateSelectionTables.h"
 #include <TComplex.h>
 
 using namespace o2;
@@ -42,15 +42,15 @@ struct TaskLcFlow {
     {
       {"hPtHadrons", "charged hadrons; #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
       {"hPtHadronsSelected", "charged hadrons after cuts; #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
-      {"hEtaHadrons", "charged hadrons; #eta; entries", {HistType::kTH1F, {{200, -8., 8.}}}},
-      {"hEtaHadronsSelected", "charged hadrons after cuts; #eta; entries", {HistType::kTH1F, {{200, -8., 8.}}}},
+      {"hEtaHadrons", "charged hadrons; #eta; entries", {HistType::kTH1F, {{100, -4., 4.}}}},
+      {"hEtaHadronsSelected", "charged hadrons after cuts; #eta; entries", {HistType::kTH1F, {{100, -4., 4.}}}},
       {"hPhiHadronsSelected", "charged hadrons after cuts; #varphi; entries", {HistType::kTH1F, {{60, 0., 2*TMath::Pi()}}}},
       {"hPhiEtaHadronsSelected", "charged hadrons after cuts; #varphi; #eta", {HistType::kTH2F, {{30, 0., 2*TMath::Pi()}, {40, -2., 2.}}}},
       {"hPhiEtaCand", "candidates; #varphi; #eta", {HistType::kTH2F, {{30, 0., 2*TMath::Pi()}, {40, -2., 2.}}}},
       {"hPtCand", "3-prong candidates;candidate #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
-      {"hNtracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 100}}}},
-      {"hcorrRef", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 100}}}},
-      {"hcorrRefGap", "charged hadron <<2>> |#Delta #eta| > 0.0; Number of tracks; <<2>> |#Delta #eta| > 0.0", {HistType::kTProfile, {{100, 0., 100}}}}
+      {"hNtracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 10000}}}},
+      {"hcorrRef", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 10000}}}},
+      {"hcorrRefGap", "charged hadron <<2>> |#Delta #eta| > 0.0; Number of tracks; <<2>> |#Delta #eta| > 0.0", {HistType::kTProfile, {{100, 0., 10000}}}}
       }};
 
   Configurable<int> d_selectionFlagLc{"d_selectionFlagLc", 1, "Selection Flag for Lc"};
