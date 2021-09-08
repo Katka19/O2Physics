@@ -18,6 +18,7 @@
 #include "Framework/HistogramRegistry.h"
 #include "PWGHF/DataModel/HFSecondaryVertex.h"
 #include "PWGHF/DataModel/HFCandidateSelectionTables.h"
+#include "Common/DataModel/TrackSelectionTables.h"
 #include <TComplex.h>
 
 using namespace o2;
@@ -46,6 +47,7 @@ struct TaskLcFlow {
       {"hEtaHadronsSelected", "charged hadrons after cuts; #eta; entries", {HistType::kTH1F, {{100, -4., 4.}}}},
       {"hPhiHadronsSelected", "charged hadrons after cuts; #varphi; entries", {HistType::kTH1F, {{60, 0., 2*TMath::Pi()}}}},
       {"hPhiEtaHadronsSelected", "charged hadrons after cuts; #varphi; #eta", {HistType::kTH2F, {{30, 0., 2*TMath::Pi()}, {40, -2., 2.}}}},
+      {"hDCAzHadronsSelected", "charged hadrons after cuts; DCA_{z} (cm); entries", {HistType::kTH1F, {{60, -3., 3.}}}},
       {"hPhiEtaCand", "candidates; #varphi; #eta", {HistType::kTH2F, {{30, 0., 2*TMath::Pi()}, {40, -2., 2.}}}},
       {"hPtCand", "3-prong candidates;candidate #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
       {"hNtracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 10000}}}},
@@ -74,7 +76,7 @@ struct TaskLcFlow {
   }
 
   /// aod::BigTracks is not soa::Filtered, should be added when filters are added
-  void process(aod::Collision const& collisions, aod::BigTracks const& tracks, soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelLcCandidate>> const& candidates)
+  void process(aod::Collision const& collisions, soa::Join<aod::FullTracks, aod::TracksExtended> const& tracks, soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelLcCandidate>> const& candidates)
   {
 
     auto vbins = (std::vector<double>)bins;
@@ -123,6 +125,7 @@ struct TaskLcFlow {
       registry.fill(HIST("hEtaHadronsSelected"), track.eta());
       registry.fill(HIST("hPhiHadronsSelected"), track.phi());
       registry.fill(HIST("hPhiEtaHadronsSelected"), track.phi(), track.eta());
+      registry.fill(HIST("hDCAzHadronsSelected"), track.dcaZ());
 
       Ntracks++;
 
