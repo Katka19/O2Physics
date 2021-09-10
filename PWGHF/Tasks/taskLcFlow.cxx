@@ -19,6 +19,7 @@
 #include "PWGHF/DataModel/HFSecondaryVertex.h"
 #include "PWGHF/DataModel/HFCandidateSelectionTables.h"
 #include "Common/DataModel/TrackSelectionTables.h"
+#include "Common/Core/trackUtilities.h"
 #include <TComplex.h>
 
 using namespace o2;
@@ -47,10 +48,13 @@ struct TaskLcFlow {
       {"hEtaHadronsSelected", "charged hadrons after cuts; #eta; entries", {HistType::kTH1F, {{100, -4., 4.}}}},
       {"hPhiHadronsSelected", "charged hadrons after cuts; #varphi; entries", {HistType::kTH1F, {{60, 0., 2*TMath::Pi()}}}},
       {"hPhiEtaHadronsSelected", "charged hadrons after cuts; #varphi; #eta", {HistType::kTH2F, {{30, 0., 2*TMath::Pi()}, {40, -2., 2.}}}},
-      {"hDCAzHadronsSelected", "charged hadrons after cuts; DCA_{z} (cm); entries", {HistType::kTH1F, {{60, -3., 3.}}}},
+      {"hDCAxyHadrons", "charged hadrons; DCA_{xy} (cm); entries", {HistType::kTH1F, {{200, -1., 1.}}}},
+      {"hDCAzHadrons", "charged hadrons; DCA_{z} (cm); entries", {HistType::kTH1F, {{200, -1., 1.}}}},
       {"hPhiEtaCand", "candidates; #varphi; #eta", {HistType::kTH2F, {{30, 0., 2*TMath::Pi()}, {40, -2., 2.}}}},
       {"hPtCand", "3-prong candidates;candidate #it{p}_{T} (GeV/#it{c}); entries", {HistType::kTH1F, {{100, 0., 10.}}}},
       {"hNtracks", "charged hadrons; Number of tracks; entries", {HistType::kTH1F, {{100, 0., 10000}}}},
+      {"hNtracksCentrality", "charged hadrons counter for centrality selection; Number of tracks; entries", {HistType::kTH1F, {{500, 0., 10000}}}},
+      {"hNtracksCorrelation", "charged hadrons correlation; N_{trks} for analysis; N_{trks} for centrality selection", {HistType::kTH2F, {{500, 0., 10000}, {500, 0., 10000}}}},
       {"hcorrRef", "charged hadron <<2>>; Number of tracks; <<2>>", {HistType::kTProfile, {{100, 0., 10000}}}},
       {"hcorrRefGap", "charged hadron <<2>> |#Delta #eta| > 0.0; Number of tracks; <<2>> |#Delta #eta| > 0.0", {HistType::kTProfile, {{100, 0., 10000}}}}
       }};
@@ -76,7 +80,7 @@ struct TaskLcFlow {
   }
 
   /// aod::BigTracks is not soa::Filtered, should be added when filters are added
-  void process(aod::Collision const& collisions, soa::Join<aod::FullTracks, aod::TracksExtended> const& tracks, soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelLcCandidate>> const& candidates)
+  void process(aod::Collision const& collisions, aod::FullTracks const& tracks, soa::Filtered<soa::Join<aod::HfCandProng3, aod::HFSelLcCandidate>> const& candidates)
   {
 
     auto vbins = (std::vector<double>)bins;
@@ -87,6 +91,7 @@ struct TaskLcFlow {
       minvarray[i] = 1.6 + 0.05*i;
     }
 
+    int NtracksCentrality = 0;
     int Ntracks = 0;
     int NtracksGapNegative = 0;
     int NtracksGapPositive = 0;
@@ -117,15 +122,29 @@ struct TaskLcFlow {
       registry.fill(HIST("hPtHadrons"), track.pt());
       registry.fill(HIST("hEtaHadrons"), track.eta());
 
+      array<float, 2> dca;
+      double magField = 2.0;
+      auto trackPar = getTrackPar(track);
+      trackPar.propagateParamToDCA({collisions.posX(), collisions.posY(), collisions.posZ()}, magField, &dca);
+
+      registry.fill(HIST("hDCAxyHadrons"), dca[0]);
+      registry.fill(HIST("hDCAzHadrons"), dca[1]);
+
+      //  count tracks for centrality
+      if(TMath::Abs(track.eta()) > 2.0 && TMath::Abs(dca[0]) < 0.0025 && TMath::Abs(dca[1])<0.0025){
+        NtracksCentrality++;
+      }
+
       if(track.pt() < 0.2) continue;
       if(track.pt() > 5.0) continue;
       if(TMath::Abs(track.eta()) > 2.0) continue;
+      if(TMath::Abs(dca[0]) > 0.0025) continue;
+      if(TMath::Abs(dca[1]) > 0.05) continue;
 
       registry.fill(HIST("hPtHadronsSelected"), track.pt());
       registry.fill(HIST("hEtaHadronsSelected"), track.eta());
       registry.fill(HIST("hPhiHadronsSelected"), track.phi());
       registry.fill(HIST("hPhiEtaHadronsSelected"), track.phi(), track.eta());
-      registry.fill(HIST("hDCAzHadronsSelected"), track.dcaZ());
 
       Ntracks++;
 
@@ -165,6 +184,8 @@ struct TaskLcFlow {
     } // charged hadrons
 
     registry.fill(HIST("hNtracks"), Ntracks);
+    registry.fill(HIST("hNtracksCentrality"), NtracksCentrality);
+    registry.fill(HIST("hNtracksCorrelation"), Ntracks, NtracksCentrality);
 
     for(int iharm=0; iharm<3; iharm++) {
       Qvector[iharm] = TComplex(Qcos[iharm], Qsin[iharm]);
