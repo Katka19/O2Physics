@@ -46,6 +46,8 @@ struct vertexingfwd {
 
   Configurable<float> maxDCAXY{"maxDCAXY", 6.0, "max allowed transverse DCA"}; // To be used when associating ambitrack to collision using best DCA
   std::vector<uint64_t> ambTrackIds;
+  std::vector<uint64_t> ambCollIds;
+  std::vector<uint64_t> ambColl1Ids;
 
   HistogramRegistry registry{
     "registry",
@@ -86,6 +88,7 @@ struct vertexingfwd {
      {"DCAYNAmb", "; DCA_{y} (cm); counts", {HistType::kTH1F, {{1000, -10, 10}}}},
 
      {"AmbiguousTrackStatus", "; ; N_{trk}", {HistType::kTH1F, {{8, 0.5, 8.5}}}},
+     {"KKGTrackStatus", "; ; N_{trk}", {HistType::kTH1F, {{6, 0.5, 6.5}}}},
 
      // DCAxy, x and y distributions for reassociated ambiguous tracks
      // when it is a false reassociation and when it is true
@@ -99,7 +102,11 @@ struct vertexingfwd {
      {"Ambiguous/TracksDCAXBestTrue", "; DCA_{x}^{best, true} (cm); counts", {HistType::kTH1F, {{500, -10, 10}}}},
      {"Ambiguous/TracksDCAYBestTrue", "; DCA_{y}^{best, true} (cm); counts", {HistType::kTH1F, {{500, -10, 10}}}},
      {"Ambiguous/TracksDCAXBestFalse", "; DCA_{x}^{best, false} (cm); counts", {HistType::kTH1F, {{500, -10, 10}}}},
-     {"Ambiguous/TracksDCAYBestFalse", "; DCA_{y}^{best, false} (cm); counts", {HistType::kTH1F, {{500, -10, 10}}}}
+     {"Ambiguous/TracksDCAYBestFalse", "; DCA_{y}^{best, false} (cm); counts", {HistType::kTH1F, {{500, -10, 10}}}},
+
+     {"hNCompatibleBC", "; number of compatible BCs; counts", {HistType::kTH1F, {{500, 0, 500}}}},
+     {"hNCompatibleCollisions", "; number of compatible collisions; counts", {HistType::kTH1F, {{20, 0, 20}}}},
+     {"hNCompatibleCollisionsPerBC", "; number of compatible collisions per BC; counts", {HistType::kTH1F, {{20, 0, 20}}}}
 
     }};
 
@@ -115,6 +122,15 @@ struct vertexingfwd {
     x2->SetBinLabel(6, "best=true (re)");
     x2->SetBinLabel(7, "not reassigned");
     x2->SetBinLabel(8, "not reassigned and true");
+
+    auto hkkgstatus = registry.get<TH1>(HIST("KKGTrackStatus"));
+    auto* axis = hkkgstatus->GetXaxis();
+    axis->SetBinLabel(1, "all MFT tracks");
+    axis->SetBinLabel(2, "out of those: amb");
+    axis->SetBinLabel(3, "out of those: nonamb");
+    axis->SetBinLabel(4, "nonamb share coll w/ amb");
+    axis->SetBinLabel(5, "nonamb share coll w/ amb (1 compatible)");
+    axis->SetBinLabel(6, "ambiguous MFT tracks");
   }
 
   void processDCAamb(MFTTracksLabeled const&,
@@ -132,6 +148,8 @@ struct vertexingfwd {
     }
     // initCCDB(bcs.begin()); if Bz is needed
     ambTrackIds.clear();
+    ambCollIds.clear();
+    ambColl1Ids.clear();
 
     float dcaXY;
     float bestDCA, bestDCAX, bestDCAY;
@@ -144,6 +162,7 @@ struct vertexingfwd {
 
       auto track = atrack.mfttrack_as<MFTTracksLabeled>();
       if (track.has_collision()) {
+        //LOG(info) << ">>>>>>>>>>>>>>>>>>>>>>>> Ambiguous track " << atrack.mfttrackId() << " has a collision";
         ambTrackIds.push_back(atrack.mfttrackId());
       }
       if (!track.has_mcParticle()) {
@@ -161,12 +180,19 @@ struct vertexingfwd {
 
       auto compatibleBCs = atrack.bc_as<ExtBCs>();
 
+      int iBC = 0;
+      int iColl = 0;
       for (auto& bc : compatibleBCs) {
         if (!bc.has_collisions()) {
           continue;
         }
+        iBC++;
         auto collisions = bc.collisions_as<CollisionsLabeled>(); // compatible collisions
+
+        int iCollPerBC = 0;
         for (auto const& collision : collisions) {
+          iColl++;
+          iCollPerBC++;
 
           // trackPar.propagateToZhelix(collision.posZ(), Bz); // track parameters propagation to the position of the z vertex
           trackPar.propagateToZlinear(collision.posZ());
@@ -189,7 +215,10 @@ struct vertexingfwd {
             bestTrackPar = trackPar;
           }
         }
+        registry.fill(HIST("hNCompatibleCollisionsPerBC"), iCollPerBC);
       }
+      registry.fill(HIST("hNCompatibleBC"), iBC);
+      registry.fill(HIST("hNCompatibleCollisions"), iColl);
 
       // other option for the truth : collision.mcCollision().posZ();
 
@@ -209,6 +238,8 @@ struct vertexingfwd {
         registry.fill(HIST("AmbiguousTrackStatus"), 4);
         if (bestMCCol == mcCollID) // correctly assigned to bestCol
         {
+          ambCollIds.push_back(mcCollID);
+          if (iColl == 1) ambColl1Ids.push_back(mcCollID);
           registry.fill(HIST("AmbiguousTrackStatus"), 6);
           registry.fill(HIST("Ambiguous/TracksDCAXYBestTrue"), bestDCA);
           registry.fill(HIST("Ambiguous/TracksDCAXBestTrue"), bestDCAX);
@@ -225,6 +256,8 @@ struct vertexingfwd {
         registry.fill(HIST("AmbiguousTrackStatus"), 3);
         if (bestMCCol == mcCollID) // correctly reassigned
         {
+          ambCollIds.push_back(mcCollID);
+          if (iColl == 1) ambColl1Ids.push_back(mcCollID);
           registry.fill(HIST("AmbiguousTrackStatus"), 6);
           registry.fill(HIST("Ambiguous/TracksDCAXYBestTrue"), bestDCA);
           registry.fill(HIST("Ambiguous/TracksDCAXBestTrue"), bestDCAX);
@@ -236,6 +269,8 @@ struct vertexingfwd {
         }
 
         if (collOrig.mcCollisionId() == mcCollID) { // initially correctly assigned
+          ambCollIds.push_back(mcCollID);
+          if (iColl == 1) ambColl1Ids.push_back(mcCollID);
           registry.fill(HIST("AmbiguousTrackStatus"), 5);
         }
       } else // the track has a collision and track.collisionId() == bestCol
@@ -247,12 +282,46 @@ struct vertexingfwd {
         registry.fill(HIST("AmbiguousTrackStatus"), 7);
         if (bestMCCol == mcCollID) // correctly assigned
         {
+          ambCollIds.push_back(mcCollID);
+          if (iColl == 1) ambColl1Ids.push_back(mcCollID);
           registry.fill(HIST("AmbiguousTrackStatus"), 8);
         }
       }
     }
   }
   PROCESS_SWITCH(vertexingfwd, processDCAamb, "get the DCAxy of MFT ambiguous tracks", true);
+
+  //using Coll = aod::Collisions;
+  void processDCANonAmb(aod::Collisions::iterator const& collision, MFTTracksLabeled const& tracks, aod::AmbiguousMFTTracks const& atracks)
+  {
+    registry.fill(HIST("KKGTrackStatus"), 1, tracks.size());
+
+    int nNonAmbTrkPerColl = 0;
+    for (auto& track : tracks) {
+
+      if (find(ambTrackIds.begin(), ambTrackIds.end(), track.globalIndex()) != ambTrackIds.end()) {
+        registry.fill(HIST("KKGTrackStatus"), 2, 1);
+      } else {
+        nNonAmbTrkPerColl++;
+        registry.fill(HIST("KKGTrackStatus"), 3, 1);
+        //auto collision = track.collision_as<Coll>();
+        if (find(ambCollIds.begin(), ambCollIds.end(), collision.globalIndex()) != ambCollIds.end()) {
+          registry.fill(HIST("KKGTrackStatus"), 4, 1);
+          //printf(">>>>>>>>>>>>>>>>>> pure nonambiguous track, but its collision contains also ambiguous tracks \n");
+        }
+        if (find(ambColl1Ids.begin(), ambColl1Ids.end(), collision.globalIndex()) != ambColl1Ids.end()) {
+          registry.fill(HIST("KKGTrackStatus"), 5, 1);
+          //printf(">>>>>>>>>>>>>>>>>> pure nonambiguous track, but its collision contains also ambiguous tracks, and the amb. track is only compatible with 1 collision \n");
+        }
+      }
+
+    }
+    //int nAmbTrkPerColl = tracks.size() - nNonAmbTrkPerColl;
+    //printf(">>>>>>>>>>>>>>>>>> number of ambiguous tracks per collision %d \n", nAmbTrkPerColl);
+
+    registry.fill(HIST("KKGTrackStatus"), 6, atracks.size());
+  }
+  PROCESS_SWITCH(vertexingfwd, processDCANonAmb, "get the DCAxy of MFT nonambiguous tracks", true);
 
   void processDCA(MFTTracksLabeled const& tracks,
                   aod::Collisions const&,
