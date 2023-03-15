@@ -505,7 +505,7 @@ struct HfTaskFlow {
         registry.fill(HIST("hEventCountMixing"), bin);
         fillMixingQA(multiplicity, vz, tracks1);
       }
-      if constexpr (std::is_same_v<aod::MFTTracks, TTracksAssoc>) {
+      if constexpr (std::is_same_v<mftTracks, TTracksAssoc>) {
         registry.fill(HIST("hEventCountMFTMixing"), bin);
         fillMFTMixingQA(multiplicity, vz, tracks2);
       }
@@ -563,9 +563,12 @@ struct HfTaskFlow {
   // =====================================
   //    process same event correlations: h-MFT case
   // =====================================
+   Filter mfttrackFilter = (aod::fwdtrack::eta > -3.9f) && (aod::fwdtrack::eta < -2.0f);
+   using mftTracks = soa::Filtered<aod::MFTTracks>;
+
   void processSameTpcMftHH(aodCollisions::iterator const& collision,
                            aodTracks const& tracks,
-                           aod::MFTTracks const& mfttracks)
+                           mftTracks const& mfttracks)
   {
     if (!(isCollisionSelected(collision, false))) {
       return;
@@ -621,7 +624,7 @@ struct HfTaskFlow {
   // =====================================
   void processMixedTpcMftHH(aodCollisions& collisions,
                             aodTracks& tracks,
-                            aod::MFTTracks& mfttracks)
+                            mftTracks& mfttracks)
   {
     //  we want to group collisions based on charged-track multiplicity
     auto getTracksSize = [&tracks](aodCollisions::iterator const& col) {
