@@ -46,6 +46,8 @@ using namespace constants::math;
 using namespace o2::aod::hf_cand;
 using namespace o2::aod::hf_cand_2prong;
 using namespace o2::analysis::hf_cuts_d0_to_pi_k;
+using namespace o2::aod::hf_cand_3prong;
+using namespace o2::analysis::hf_cuts_lc_to_p_k_pi;
 
 struct HfTaskFlow {
   SliceCache cache;
@@ -63,6 +65,7 @@ struct HfTaskFlow {
   //  configurables for HF candidates
   Configurable<int> selectionFlagD0{"selectionFlagD0", 1, "Selection Flag for D0"};
   Configurable<int> selectionFlagD0bar{"selectionFlagD0bar", 1, "Selection Flag for D0bar"};
+  Configurable<int> selectionFlagLc{"selectionFlagLc", 1, "Selection Flag for Lc"};
   Configurable<double> yCandMax{"yCandMax", -1., "max. cand. rapidity"};
   Configurable<std::vector<double>> binsPt{"binsPt", std::vector<double>{hf_cuts_d0_to_pi_k::vecBinsPt}, "pT bin limits"};
 
@@ -80,7 +83,10 @@ struct HfTaskFlow {
   //  HF candidate filter
   //  TODO: use Partition instead of filter
   Filter candidateFilter = aod::hf_sel_candidate_d0::isSelD0 >= selectionFlagD0 || aod::hf_sel_candidate_d0::isSelD0bar >= selectionFlagD0bar;
-  using hfCandidates = soa::Filtered<soa::Join<aod::HfCand2Prong, aod::HfSelD0>>;
+  using d0Candidates = soa::Filtered<soa::Join<aod::HfCand2Prong, aod::HfSelD0>>;
+
+  Filter filterSelectCandidates = (aod::hf_sel_candidate_lc::isSelLcToPKPi >= selectionFlagLc || aod::hf_sel_candidate_lc::isSelLcToPiKP >= selectionFlagLc);
+  using lcCandidates = soa::Filtered<soa::Join<aod::HfCand3Prong, aod::HfSelLc>>;
 
   //  configurables for containers
   ConfigurableAxis axisVertex{"axisVertex", {14, -7, 7}, "vertex axis for histograms"};
@@ -326,15 +332,26 @@ struct HfTaskFlow {
     registry.fill(HIST("mixedTpcMftHH/hNtracks"), Ntracks);
   }
 
-  //  TODO: Check how to put this into a Filter
   template <typename TTrack>
   bool isAcceptedCandidate(TTrack candidate)
   {
-    if (!(candidate.hfflag() & 1 << DecayType::D0ToPiK)) {
-      return false;
+    if constexpr (std::is_same_v<d0Candidates::iterator, TTrack>) {
+      if (!(candidate.hfflag() & 1 << aod::hf_cand_2prong::DecayType::D0ToPiK)) {
+        return false;
+      }
+      if (yCandMax >= 0. && std::abs(yD0(candidate)) > yCandMax) {
+        return false;
+      }
+      return true;
     }
-    if (yCandMax >= 0. && std::abs(yD0(candidate)) > yCandMax) {
-      return false;
+    if constexpr (std::is_same_v<lcCandidates::iterator, TTrack>) {
+      if (!(candidate.hfflag() & 1 << aod::hf_cand_3prong::DecayType::LcToPKPi)) {
+        return false;
+      }
+      if (yCandMax >= 0. && std::abs(yLc(candidate)) > yCandMax) {
+        return false;
+      }
+      return true;
     }
     return true;
   }
@@ -348,13 +365,25 @@ struct HfTaskFlow {
         continue;
       }
 
-      if (candidate.isSelD0() >= selectionFlagD0) {
-        registry.fill(HIST("hMass"), invMassD0ToPiK(candidate), candidate.pt());
+      if constexpr (std::is_same_v<d0Candidates, TTracks>) {
+        if (candidate.isSelD0() >= selectionFlagD0) {
+          registry.fill(HIST("hMass"), invMassD0ToPiK(candidate), candidate.pt());
+        }
+        if (candidate.isSelD0bar() >= selectionFlagD0bar) {
+          registry.fill(HIST("hMass"), invMassD0barToKPi(candidate), candidate.pt());
+        }
+        registry.fill(HIST("hPtCand"), candidate.pt());
       }
-      if (candidate.isSelD0bar() >= selectionFlagD0bar) {
-        registry.fill(HIST("hMass"), invMassD0barToKPi(candidate), candidate.pt());
+
+      if constexpr (std::is_same_v<lcCandidates, TTracks>) {
+        if (candidate.isSelLcToPKPi() >= selectionFlagLc) {
+          registry.fill(HIST("hMass"), invMassLcToPKPi(candidate), candidate.pt());
+        }
+        if (candidate.isSelLcToPiKP() >= selectionFlagLc) {
+          registry.fill(HIST("hMass"), invMassLcToPiKP(candidate), candidate.pt());
+        }
+        registry.fill(HIST("hPtCand"), candidate.pt());
       }
-      registry.fill(HIST("hPtCand"), candidate.pt());
     }
   }
 
@@ -375,15 +404,24 @@ struct HfTaskFlow {
 
       //  calculating inv. mass to be filled into the container below
       //  Note: this is needed only in case of HF-hadron correlations
+      //  TODO: take into account also reflections
       bool fillingHFcontainer = false;
       double invmass = 0;
-      if constexpr (std::is_same_v<hfCandidates, TTracksTrig>) {
-        //  TODO: Check how to put this into a Filter
+
+      if constexpr (std::is_same_v<d0Candidates, TTracksTrig>) {
         if (!isAcceptedCandidate(track1)) {
           continue;
         }
         fillingHFcontainer = true;
         invmass = invMassD0ToPiK(track1);
+      }
+
+      if constexpr (std::is_same_v<lcCandidates, TTracksTrig>) {
+        if (!isAcceptedCandidate(track1)) {
+          continue;
+        }
+        fillingHFcontainer = true;
+        invmass = invMassLcToPiKP(track1);
       }
 
       //  fill single-track distributions
@@ -405,8 +443,13 @@ struct HfTaskFlow {
 
         //  in case of HF-h correlations, remove candidate daughters from the pool of associated hadrons
         //  with which the candidate is being correlated
-        if constexpr (std::is_same_v<hfCandidates, TTracksTrig>) {
+        if constexpr (std::is_same_v<d0Candidates, TTracksTrig>) {
           if ((track1.prong0Id() == track2.globalIndex()) || (track1.prong1Id() == track2.globalIndex())) {
+            continue;
+          }
+        }
+        if constexpr (std::is_same_v<lcCandidates, TTracksTrig>) {
+          if ((track1.prong0Id() == track2.globalIndex()) || (track1.prong1Id() == track2.globalIndex()) || (track1.prong2Id() == track2.globalIndex())) {
             continue;
           }
         }
@@ -463,7 +506,7 @@ struct HfTaskFlow {
       const auto multiplicity = getPartsSize(collision1);
       const auto vz = collision1.posZ();
 
-      if constexpr (std::is_same_v<hfCandidates, TTracksTrig>) {
+      if constexpr (std::is_same_v<d0Candidates, TTracksTrig> ||  std::is_same_v<lcCandidates, TTracksTrig>) {
         registry.fill(HIST("hEventCountHFMixing"), bin);
         fillHFMixingQA(multiplicity, vz, tracks1);
       } 
@@ -508,9 +551,10 @@ struct HfTaskFlow {
   // =====================================
   //    process same event correlations: HF-h case
   // =====================================
+  template<typename THfCandidates>
   void processSameTpcTpcHfH(aodCollisions::iterator const& collision,
                             aodTracks const& tracks,
-                            hfCandidates const& candidates)
+                            THfCandidates const& candidates)
   {
     if (!(isCollisionSelected(collision, false))) {
       return;
@@ -524,7 +568,22 @@ struct HfTaskFlow {
     fillCandidateQA(candidates);
     fillCorrelations(sameTpcTpcHfH, candidates, tracks, multiplicity, collision.posZ());
   }
-  PROCESS_SWITCH(HfTaskFlow, processSameTpcTpcHfH, "Process same-event correlations for HF-h case", true);
+
+  void processSameTpcTpcD0H(aodCollisions::iterator const& collision,
+                            aodTracks const& tracks,
+                            d0Candidates const& candidates)
+  {
+    processSameTpcTpcHfH(collision, tracks, candidates);
+  }
+  PROCESS_SWITCH(HfTaskFlow, processSameTpcTpcD0H, "Process same-event correlations for D0-h case", true);
+
+  void processSameTpcTpcLcH(aodCollisions::iterator const& collision,
+                            aodTracks const& tracks,
+                            lcCandidates const& candidates)
+  {
+    processSameTpcTpcHfH(collision, tracks, candidates);
+  }
+  PROCESS_SWITCH(HfTaskFlow, processSameTpcTpcLcH, "Process same-event correlations for Lc-h case", true);
 
   // =====================================
   //    process same event correlations: h-MFT case
@@ -572,7 +631,7 @@ struct HfTaskFlow {
   // =====================================
   void processMixedTpcTpcHfH(aodCollisions& collisions,
                              aodTracks& tracks,
-                             hfCandidates& candidates)
+                             d0Candidates& candidates)
   {
     //  we want to group collisions based on charged-track multiplicity
     auto getTracksSize = [&tracks, this](aodCollisions::iterator const& col) {
